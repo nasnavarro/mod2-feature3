@@ -1,0 +1,20 @@
+{
+  "name": "mod2-feature2",
+  "version": "1.0.0",
+  "description": "Module 2 - Sprint 8 - Feature 2 - Expanding the Node Express API",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --watch src/server.js",
+    "test": "node tests/products.service.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  }
+}
