@@ -1,31 +1,32 @@
-# Módulo 2 · Feature 2 — Controladores, Servicios y CRUD completo
+# Módulo 2 · Feature 3 — SQL, Prisma, Supabase
 
-**Sprint 8 · Node.js + Express · Arquitectura por capas**
-
----
-
-> **Nota sobre IDs:** El enunciado define los IDs de producto como `string` (`id: '1'`). En este proyecto se usa `number` (`id: 1`) por coherencia con las operaciones numéricas (comparaciones, generación de siguiente ID) y porque es el tipo más habitual antes de introducir una base de datos real.
+**Sprint 9 · Node.js + Express · Persistencia con PostgreSQL**
 
 ---
 
 ## Objetivo
 
-Evolucionar la API del sprint anterior incorporando una arquitectura profesional basada en capas:
+Dar el salto de datos en memoria a una base de datos real. La API del sprint anterior funcionaba con datos temporales que desaparecían al reiniciar el servidor. En este sprint se persisten datos usando **PostgreSQL en Supabase** y **Prisma ORM**.
 
-- Separar responsabilidades entre rutas, controladores y servicios.
-- Implementar el CRUD completo para el recurso `products`.
-- Gestionar validaciones básicas y errores HTTP correctamente.
-- Mantener el formato de respuesta estándar en JSON.
+Conceptos trabajados:
+
+- Conectar una API Node.js + Express a una base de datos real.
+- Usar Prisma ORM para interactuar con PostgreSQL.
+- Definir el modelo de datos en `schema.prisma`.
+- Gestionar credenciales con variables de entorno (`.env`).
+- Centralizar el manejo de errores en Express con middlewares.
 
 ---
 
 ## Stack
 
-| Tecnología | Versión |
-|------------|---------|
-| Node.js    | 20+ (LTS) |
-| Express    | 5.x     |
-| ES Modules | `"type": "module"` en `package.json` |
+| Tecnología   | Versión               |
+|--------------|-----------------------|
+| Node.js      | 20+ (LTS)             |
+| Express      | 5.x                   |
+| Prisma ORM   | 7.x                   |
+| PostgreSQL   | Supabase              |
+| ES Modules   | `"type": "module"`    |
 
 ---
 
@@ -33,135 +34,151 @@ Evolucionar la API del sprint anterior incorporando una arquitectura profesional
 
 ```
 src/
+├── config/
+│   └── prismaClient.js       # Instancia única de PrismaClient
 ├── controllers/
-│   └── products.controller.js   # Valida entrada, llama al servicio, devuelve respuesta
+│   └── products.controller.js
 ├── services/
-│   └── products.service.js      # Lógica de negocio y manipulación de datos
-├── db/
-│   └── products.js              # Datos en memoria (mock data)
-├── helpers/
-│   └── response.js              # Helpers ok() y fail() para respuestas estándar
+│   └── products.service.js   # Lógica de negocio con Prisma
 ├── routes/
-│   ├── index.routes.js          # Punto de entrada de rutas + 404/500 global
-│   ├── health.routes.js         # Ruta de diagnóstico del servidor
-│   └── products.routes.js       # Endpoints de productos → conecta con controller
-├── app.js                       # Configuración de Express (middlewares + rutas)
-└── server.js                    # Arranque del servidor (listen)
+│   ├── index.routes.js
+│   ├── health.routes.js
+│   └── products.routes.js
+├── middlewares/
+│   ├── notFound.js           # Maneja rutas inexistentes
+│   ├── errorHandler.js       # Maneja errores globales
+│   └── validateProduct.js    # Valida body de productos
+├── helpers/
+│   └── controllers.response.js
+├── app.js
+└── server.js
+
+prisma/
+├── schema.prisma
+└── seed.js                   # Script para poblar la BD con datos iniciales
+
+.env
 ```
-
-**Separación de responsabilidades:**
-
-- `routes/` define los endpoints. Sin lógica de negocio.
-- `controllers/` valida la entrada y coordina la respuesta.
-- `services/` contiene toda la lógica de negocio.
 
 ---
 
-## Arrancar el proyecto
+## Configuración
+
+### Variables de entorno
+
+Crea un archivo `.env` en la raíz:
+
+```
+DATABASE_URL="postgresql://postgres.[USER]:[PASSWORD]@[HOST]:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.[USER]:[PASSWORD]@[HOST]:5432/postgres"
+PORT=3000
+```
+
+- `DATABASE_URL` → Transaction Pooler (puerto 6543) — usado en runtime por PrismaClient.
+- `DIRECT_URL` → Session Pooler (puerto 5432) — usado por los comandos CLI de Prisma.
+
+> El archivo `.env` no debe subirse a GitHub.
+
+### Arrancar el proyecto
 
 ```bash
 npm install
 npm start
 ```
 
-El servidor arranca en `http://localhost:3000` con recarga automática (`--watch`).
+### Comandos Prisma
+
+```bash
+npx prisma generate       # Regenera el cliente tras cambios en el schema
+npx prisma db push        # Sincroniza el schema con Supabase
+npx prisma db pull        # Introspección: lee el schema real de la BD
+npx prisma studio         # Explorador visual de la BD
+```
+
+### Seed (datos iniciales)
+
+```bash
+node --env-file=.env prisma/seed.js
+```
+
+---
+
+## Modelo de datos
+
+```prisma
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  price       Float
+  stock       Int
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("products")
+}
+```
 
 ---
 
 ## Endpoints
 
-| Método | Ruta                  | Descripción                        |
-|--------|-----------------------|------------------------------------|
-| GET    | `/health`             | Estado del servidor                |
-| GET    | `/api/products`       | Listar todos los productos         |
-| GET    | `/api/products/:id`   | Obtener un producto por ID         |
-| POST   | `/api/products`       | Crear un producto                  |
-| PUT    | `/api/products/:id`   | Actualizar un producto             |
-| DELETE | `/api/products/:id`   | Eliminar un producto               |
-| —      | cualquier otra ruta   | 404 en formato JSON estándar       |
+| Método | Ruta                  | Descripción              |
+|--------|-----------------------|--------------------------|
+| GET    | `/health`             | Estado del servidor      |
+| GET    | `/api/products`       | Listar productos         |
+| GET    | `/api/products/:id`   | Obtener producto por ID  |
+| POST   | `/api/products`       | Crear producto           |
+| PUT    | `/api/products/:id`   | Actualizar producto      |
+| DELETE | `/api/products/:id`   | Eliminar producto        |
 
 ### Body POST / PUT
 
 ```json
 {
   "name": "string (obligatorio)",
-  "price": "number (obligatorio, >= 0)",
+  "price": "number (obligatorio)",
   "description": "string (opcional)",
   "stock": "number (opcional)",
   "imageUrl": "string (opcional)"
 }
 ```
 
-### Códigos HTTP
-
-| Caso                  | Código |
-|-----------------------|--------|
-| Producto creado       | 201    |
-| Datos inválidos       | 400    |
-| Producto no encontrado | 404   |
-
 ---
 
-## Formato de respuesta estándar
+## Flujo de errores
 
-**Éxito**
-```json
-{ "ok": true, "data": { ... } }
-```
+Los controladores usan `next(err)` para delegar al middleware `errorHandler`, que centraliza todas las respuestas de error. Express lo identifica por su firma de 4 parámetros: `(err, req, res, next)`.
 
-**Error**
-```json
-{ "ok": false, "error": { "message": "..." } }
+```js
+try {
+  // ...
+} catch (err) {
+  next(err)
+}
 ```
 
 ---
 
 ## Ejemplos cURL
 
-**Health check**
 ```bash
-curl http://localhost:3000/health
-```
-
-**Listar productos**
-```bash
+# Listar productos
 curl http://localhost:3000/api/products
-```
 
-**Obtener producto por ID**
-```bash
-curl http://localhost:3000/api/products/1
-```
-
-**Producto no encontrado (404)**
-```bash
-curl http://localhost:3000/api/products/999
-```
-
-**Crear producto**
-```bash
+# Crear producto
 curl -X POST http://localhost:3000/api/products \
   -H "Content-Type: application/json" \
-  -d '{"name":"Gorra Deportiva","price":14.99}'
-```
+  -d '{"name":"Gorra Deportiva","price":14.99,"stock":100,"description":"Gorra ajustable"}'
 
-**Actualizar producto**
-```bash
+# Actualizar producto
 curl -X PUT http://localhost:3000/api/products/1 \
   -H "Content-Type: application/json" \
-  -d '{"name":"Camiseta Premium","price":24.99}'
-```
+  -d '{"price":12.99}'
 
-**Eliminar producto**
-```bash
+# Eliminar producto
 curl -X DELETE http://localhost:3000/api/products/1
-```
-
-**Validación fallida (400)**
-```bash
-curl -X POST http://localhost:3000/api/products \
-  -H "Content-Type: application/json" \
-  -d '{"description":"Sin nombre ni precio"}'
 ```
 
 ---
@@ -169,15 +186,12 @@ curl -X POST http://localhost:3000/api/products \
 ## Checks de autoevaluación
 
 - [ ] `npm start` levanta el servidor sin errores
-- [ ] `GET /health` → `{ ok: true, data: { ... } }`
-- [ ] `GET /api/products` → `{ ok: true, data: [ ... ] }`
-- [ ] `GET /api/products/1` → `{ ok: true, data: { ... } }`
-- [ ] `GET /api/products/999` → 404 con `{ ok: false, error: { message: "..." } }`
-- [ ] `POST /api/products` con body válido → 201 con producto creado
-- [ ] `POST /api/products` sin `name` o `price` → 400
-- [ ] `PUT /api/products/1` actualiza el producto
-- [ ] `DELETE /api/products/1` elimina el producto
-- [ ] Ruta inexistente → 404 en JSON estándar
+- [ ] Prisma conecta con Supabase
+- [ ] `GET /api/products` devuelve datos de la BD
+- [ ] `POST /api/products` crea registros en la BD
+- [ ] `PUT /api/products/:id` actualiza registros
+- [ ] `DELETE /api/products/:id` elimina registros
+- [ ] Los errores se manejan con `errorHandler`
 
 ---
 
@@ -185,8 +199,9 @@ curl -X POST http://localhost:3000/api/products \
 
 Durante el sprint usé la IA para:
 
-- **Revisión de arquitectura**: consulté las responsabilidades de cada capa (routes / controllers / services) y qué errores evitar.
-- **Revisión de validaciones**: revisé qué casos de error cubrir en POST y PUT.
-- **Readme (`README.md`)**: generado con ayuda de la IA a partir de las instrucciones del sprint.
+- **Configuración de Prisma 7**: resolución del error de prepared statements con el pooler de Supabase y elección entre Transaction/Session pooler.
+- **Revisión del schema**: definición del modelo `Product` y mapeo a la tabla `products`.
+- **Seed**: creación del script para poblar la BD con los datos iniciales del proyecto anterior. El proceso fue: definir los datos en `prisma/seed.js` importando la instancia de `prismaClient.js`, usar `prisma.product.createMany()` con el array de productos (sin `id` ni `createdAt`, que los genera la BD), y ejecutarlo con `node --env-file=.env prisma/seed.js`.
+- **README**: generado con ayuda de la IA a partir de las instrucciones del sprint.
 
 Regla aplicada: nada de copiar código sin entenderlo. Cada sugerencia fue leída, ajustada y probada antes de quedar en el proyecto.
