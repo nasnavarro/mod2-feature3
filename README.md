@@ -147,6 +147,22 @@ model Product {
 
 ---
 
+## Helper de respuestas
+
+Antes de introducir middlewares en este sprint, se construyó un helper propio (`src/helpers/controllers.response.js`) para centralizar y estandarizar todas las respuestas HTTP de la API. Agrupa las respuestas más comunes:
+
+| Helper | Código | Uso |
+|---|---|---|
+| `responseOk` | 200 | GET y operaciones con datos existentes |
+| `responseCreated` | 201 | Creación de un nuevo recurso (POST) |
+| `responseBadRequest` | 400 | Validación fallida, datos inválidos |
+| `responseNotFound` | 404 | Recurso no encontrado por id |
+| `responseServerError` | 500 | Errores inesperados del servidor |
+
+Este helper se integró con el middleware `errorHandler`: cuando un controlador hace `next(err)`, el `errorHandler` delega en `responseServerError` para mantener el formato de respuesta consistente en toda la API.
+
+---
+
 ## Flujo de errores
 
 Los controladores usan `next(err)` para delegar al middleware `errorHandler`, que centraliza todas las respuestas de error. Express lo identifica por su firma de 4 parámetros: `(err, req, res, next)`.
